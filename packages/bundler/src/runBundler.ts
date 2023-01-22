@@ -152,6 +152,7 @@ export async function runBundler (argv: string[], overrideExit = true): Promise<
   }
 
   await new DeterministicDeployer(wallet.provider as any).deterministicDeploy(BundlerHelper__factory.bytecode)
+  // execManagerConfig.bundlerHelper = resultContract;
 
   const [execManager, eventsManager, reputationManager, mempoolManager] = initServer(execManagerConfig, entryPoint.signer)
   const methodHandler = new UserOpMethodHandler(

@@ -28,7 +28,9 @@ export function initServer (config: BundlerConfig, signer: Signer): [ExecutionMa
 
   reputationManager.addWhitelist(...config.whitelist ?? [])
   reputationManager.addBlacklist(...config.blacklist ?? [])
-  executionManager.setAutoBundler(config.autoBundleInterval, config.autoBundleMempoolSize)
+  // TODO WHY?
+  console.log("COnfig being set", config)
+  executionManager.setAutoBundler(config.autoBundleInterval, 2)//config.autoBundleMempoolSize)
 
   return [executionManager, eventsManager, reputationManager, mempoolManager]
 }

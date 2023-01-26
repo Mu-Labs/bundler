@@ -82,19 +82,51 @@ class Runner {
     return e
   }
 
-  async runUserOp (target: string, data: string): Promise<void> {
+  async runUserOp (target: string, data: string): Promise<string> {
     const userOp = await this.accountApi.createSignedUserOp({
       target,
       data
     })
     try {
+      console.log("user op before", userOp)
       const userOpHash = await this.bundlerProvider.sendUserOpToBundler(userOp)
-      const txid = await this.accountApi.getUserOpReceipt(userOpHash)
-      console.log('reqId', userOpHash, 'txid=', txid)
+      return userOpHash;
+
+      // Doesn't work because bundler will not allow two transactions from the same sender
+      // in 1 bundle (for good reason because of state changes)
+
+      // let secondUserOp = await this.accountApi.createUnsignedUserOp({
+      //   target,
+      //   data
+      // })
+      // secondUserOp.nonce = newNonce(1);
+      // secondUserOp.preVerificationGas = newNonce(50000);
+      // secondUserOp = await this.accountApi.signUserOp(secondUserOp);
+      // console.log("Second user op", secondUserOp)
+      // userOp.nonce = newNonce(1)
+      // userOp.preVerificationGas = 50000
+      // userOp.initCode = "0x"
+      // const userOpHashTwo = await this.bundlerProvider.sendUserOpToBundler(secondUserOp)
+      // const txid = await this.accountApi.getUserOpReceipt(userOpHash)
+      // const txIdTwo = await this.accountApi.getUserOpReceipt(userOpHashTwo)
+      // console.log('reqId', userOpHash, 'txid=', txid)
+      // console.log('reqId', userOpHashTwo, 'txid=', txIdTwo)
+      
     } catch (e: any) {
       throw this.parseExpectedGas(e)
     }
   }
+
+  async getReceipt(userOpHash: string): Promise<string | null> {
+    const txId = await this.accountApi.getUserOpReceipt(userOpHash)
+    console.log('reqId', userOpHash, 'txid=', txId)
+    return txId;
+  }
+}
+
+
+async function newNonce (nonce: number) : Promise<BigNumber> {
+  return BigNumber.from(nonce)
 }
 
 async function main (): Promise<void> {
@@ -155,8 +187,11 @@ async function main (): Promise<void> {
 
   const index = Date.now()
   const client = await new Runner(provider, opts.bundlerUrl, accountOwner, opts.entryPoint, index).init(deployFactory ? signer : undefined)
+  const indexTwo = Date.now()
+  const client2 = await new Runner(provider, opts.bundlerUrl, accountOwner, opts.entryPoint, indexTwo).init(undefined)
 
   const addr = await client.getAddress()
+  const addr2 = await client2.getAddress()
 
   async function isDeployed (addr: string): Promise<boolean> {
     return await provider.getCode(addr).then(code => code !== '0x')
@@ -180,14 +215,34 @@ async function main (): Promise<void> {
     console.log('not funding account. balance is enough')
   }
 
+  const bal2 = await getBalance(addr2)
+  console.log('account address', addr2, 'deployed=', await isDeployed(addr2), 'bal=', formatEther(bal2))
+  // TODO: actual required val
+  if (bal2.lt(requiredBalance.div(2))) {
+    console.log('funding account to', requiredBalance)
+    await signer.sendTransaction({
+      to: addr2,
+      value: requiredBalance.sub(bal2)
+    })
+  } else {
+    console.log('not funding account. balance is enough')
+  }
+
+
   const dest = addr
   const data = keccak256(Buffer.from('nonce()')).slice(0, 10)
   console.log('data=', data)
-  await client.runUserOp(dest, data)
+  const userOpHash1 = await client.runUserOp(dest, data)
+  const dest2 = addr2
+  const data2 = keccak256(Buffer.from('nonce()')).slice(0, 10)
+  console.log('data2=', data2)
+  const userOpHash2 = await client2.runUserOp(dest2, data2)
+  const tx1 = await client.getReceipt(userOpHash1)
+  const tx2 = await client2.getReceipt(userOpHash2)
   console.log('after run1')
   // client.accountApi.overheads!.perUserOp = 30000
-  await client.runUserOp(dest, data)
-  console.log('after run2')
+  // await client.runUserOp(dest, data)
+  // console.log('after run2')
   await bundler?.stop()
 }
 
